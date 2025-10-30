@@ -14,7 +14,6 @@
 ;;; Code:
 
 (require 'treesit)
-(require 'tuareg)
 
 (declare-function treesit-parser-create "treesit.c")
 (declare-function treesit-induce-sparse-tree "treesit.c")
@@ -243,10 +242,15 @@
 
   (treesit-major-mode-setup))
 
-;;;###autoload
-(progn
-  (add-to-list 'auto-mode-alist '("\\.ml\\'" . ocaml-ts-mode))
-  (add-to-list 'auto-mode-alist '("\\.mli\\'" . ocamli-ts-mode)))
+;; NOTE: auto-mode-alist modifications are commented out because ocaml-ts-mode
+;; is used as a library by tuareg-mode for tree-sitter support, not as a
+;; standalone mode. Users should use tuareg-mode with tuareg-mode-treesitter-derive
+;; set to t to get tree-sitter support.
+;;
+;; ;;;###autoload
+;; (progn
+;;   (add-to-list 'auto-mode-alist '("\\.ml\\'" . ocaml-ts-mode))
+;;   (add-to-list 'auto-mode-alist '("\\.mli\\'" . ocamli-ts-mode)))
 
 (provide 'ocaml-ts-mode)
 

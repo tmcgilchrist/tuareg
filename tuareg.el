@@ -3323,8 +3323,10 @@ Short cuts for interactions with the REPL:
 
     ;; TODO Conditional load of treesitter or smie based font-lock
     (if (and tuareg-mode-treesitter-derive
-             (version>= "29.1" emacs-version))
-        (require 'tuareg-mode-treesitter)
+             (version<= "29.1" emacs-version))
+        (progn
+          (require 'tuareg-treesitter)
+          (tuareg-treesitter--setup))
       (tuareg--common-mode-setup)
       (tuareg--install-font-lock))
 

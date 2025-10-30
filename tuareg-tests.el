@@ -51,6 +51,87 @@
         (indent-region (point-min) (point-max))
         (should (equal (funcall text) orig))))))
 
+;; Tree-sitter mode tests
+;; These tests verify that enabling tree-sitter mode (via tuareg-mode-treesitter-derive)
+;; produces the same indentation as the standard mode. Tree-sitter is used for
+;; font-locking while SMIE continues to handle indentation.
+
+(ert-deftest tuareg-indent-treesitter-good ()
+  "Check indentation with tree-sitter mode enabled.
+This test verifies that enabling tree-sitter (for font-locking)
+doesn't break indentation, which continues to use SMIE."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocaml)))
+  (let ((file (expand-file-name "indent-test.ml" tuareg-test-dir))
+        (text (lambda () (buffer-substring-no-properties
+                          (point-min) (point-max))))
+        (tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (tuareg-mode)
+      (let ((orig (funcall text)))
+        ;; Remove the indentation and check that we get the original text.
+        (tuareg-test--remove-indentation)
+        (indent-region (point-min) (point-max))
+        (should (equal (funcall text) orig))
+        ;; Indent again to verify idempotency.
+        (indent-region (point-min) (point-max))
+        (should (equal (funcall text) orig))))))
+
+(ert-deftest tuareg-indent-treesitter-bad ()
+  "Check indentation with tree-sitter mode enabled for known failures.
+This test verifies that tree-sitter mode has the same limitations
+as the standard mode for indentation edge cases."
+  :expected-result :failed
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocaml)))
+  (let ((file (expand-file-name "indent-test-failed.ml" tuareg-test-dir))
+        (text (lambda () (buffer-substring-no-properties
+                          (point-min) (point-max))))
+        (tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (tuareg-mode)
+      (let ((orig (funcall text)))
+        ;; Remove the indentation and check that we get the original text.
+        (tuareg-test--remove-indentation)
+        (indent-region (point-min) (point-max))
+        (should (equal (funcall text) orig))
+        ;; Indent again to verify idempotency.
+        (indent-region (point-min) (point-max))
+        (should (equal (funcall text) orig))))))
+
+(ert-deftest tuareg-treesitter-consistency ()
+  "Verify that tree-sitter mode produces identical indentation to standard mode.
+This is a key requirement: tree-sitter should be a drop-in replacement."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocaml)))
+  (let ((file (expand-file-name "indent-test.ml" tuareg-test-dir)))
+    (let ((standard-result
+           (let ((tuareg-mode-treesitter-derive nil))
+             (with-temp-buffer
+               (insert-file-contents file)
+               (tuareg-mode)
+               (tuareg-test--remove-indentation)
+               (indent-region (point-min) (point-max))
+               (buffer-substring-no-properties (point-min) (point-max)))))
+          (treesitter-result
+           (let ((tuareg-mode-treesitter-derive t))
+             (with-temp-buffer
+               (insert-file-contents file)
+               (tuareg-mode)
+               (tuareg-test--remove-indentation)
+               (indent-region (point-min) (point-max))
+               (buffer-substring-no-properties (point-min) (point-max))))))
+      ;; Both modes should produce identical indentation
+      (should (equal standard-result treesitter-result)))))
+
 (defmacro tuareg--lets (&rest forms)
   "Execute FORMS in sequence, binding new vars as they occur.
 Every expression in FORMS can be any normal ELisp expression,
