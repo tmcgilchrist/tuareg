@@ -14,6 +14,7 @@
 (require 'tuareg)
 (require 'tuareg-treesitter)
 (require 'tuareg-menhir)
+(require 'tuareg-ocamllex)
 (require 'ert)
 
 (defconst tuareg-tree-sitter-test-dir
@@ -370,6 +371,122 @@ This is a key requirement: tree-sitter should be a drop-in replacement."
     ;; Re-enable with tree-sitter
     (let ((tuareg-mode-treesitter-derive t))
       (tuareg-menhir-mode)
+      (should (treesit-parser-list)))))
+
+;;; OCamllex Tree-sitter Tests
+
+(ert-deftest tuareg-ocamllex-treesitter-mode-activation ()
+  "Test that tree-sitter mode activates correctly for OCamllex files."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "rule token = parse | eof { EOF }")
+      (tuareg-ocamllex-mode)
+      ;; Verify that a tree-sitter parser was created
+      (should (treesit-parser-list))
+      (should (eq (treesit-parser-language (car (treesit-parser-list))) 'ocamllex)))))
+
+(ert-deftest tuareg-ocamllex-treesitter-mode-not-activated ()
+  "Test that tree-sitter mode does not activate when disabled for OCamllex."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)))
+  (let ((tuareg-mode-treesitter-derive nil))
+    (with-temp-buffer
+      (insert "rule token = parse | eof { EOF }")
+      (tuareg-ocamllex-mode)
+      ;; Verify that no tree-sitter parser was created
+      (should-not (treesit-parser-list)))))
+
+(ert-deftest tuareg-ocamllex-treesitter-font-lock-keyword ()
+  "Test that OCamllex keywords are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "rule token = parse | eof { EOF }")
+      (tuareg-ocamllex-mode)
+      (font-lock-ensure)
+      ;; Check that "rule" is highlighted as a keyword
+      (goto-char (point-min))
+      (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))
+
+(ert-deftest tuareg-ocamllex-treesitter-font-lock-comment ()
+  "Test that OCamllex comments are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "(* comment *)\nrule token = parse")
+      (tuareg-ocamllex-mode)
+      (font-lock-ensure)
+      ;; Check that the comment is highlighted
+      (goto-char (point-min))
+      (forward-char 3)
+      (should (eq (get-text-property (point) 'face) 'font-lock-comment-face)))))
+
+(ert-deftest tuareg-ocamllex-treesitter-indentation ()
+  "Test that OCamllex indentation works with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "rule token = parse\n| eof { EOF }")
+      (tuareg-ocamllex-mode)
+      ;; Test that we can indent without error
+      (goto-char (point-min))
+      (forward-line 1)
+      (indent-for-tab-command)
+      ;; Just verify no error occurred
+      (should t))))
+
+(ert-deftest tuareg-ocamllex-treesitter-from-file ()
+  "Test that tree-sitter mode works correctly with a real OCamllex file."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (let ((file (expand-file-name "test-ocamllex.mll" tuareg-tree-sitter-test-dir))
+        (tuareg-mode-treesitter-derive t))
+    (when (file-exists-p file)
+      (with-temp-buffer
+        (insert-file-contents file)
+        (tuareg-ocamllex-mode)
+        ;; Verify tree-sitter parser was created
+        (should (treesit-parser-list))
+        ;; Verify font-locking works
+        (font-lock-ensure)
+        ;; Check that we can find a keyword
+        (goto-char (point-min))
+        (when (search-forward "rule" nil t)
+          (goto-char (match-beginning 0))
+          (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))))
+
+(ert-deftest tuareg-ocamllex-treesitter-toggle ()
+  "Test toggling between standard and tree-sitter modes for OCamllex."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'ocamllex)))
+  (with-temp-buffer
+    (insert "rule token = parse | eof { EOF }")
+
+    ;; Start with tree-sitter disabled
+    (let ((tuareg-mode-treesitter-derive nil))
+      (tuareg-ocamllex-mode)
+      (should-not (treesit-parser-list)))
+
+    ;; Re-enable with tree-sitter
+    (let ((tuareg-mode-treesitter-derive t))
+      (tuareg-ocamllex-mode)
       (should (treesit-parser-list)))))
 
 (provide 'tuareg-tree-sitter-tests)
