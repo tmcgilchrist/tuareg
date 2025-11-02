@@ -1,0 +1,9 @@
+# Don't copy these to Docker image
+*.elc
+*.md
+.git
+.github
+TODO.md
+PR-*.md
+Dockerfile*
+.dockerignore

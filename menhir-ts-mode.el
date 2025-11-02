@@ -1,9 +1,9 @@
 ;;; menhir-ts-mode.el --- tree-sitter support for Menhir  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024 Free Software Foundation, Inc.
+;; Copyright (C) 2025 Free Software Foundation, Inc.
 
-;; Author     : Tree-sitter integration for Tuareg
-;; Maintainer : Tree-sitter integration for Tuareg
+;; Author     : Tim McGilchrist <timmcgil@gmail.com>
+;; Maintainer : Tim McGilchrist <timmcgil@gmail.com>
 ;; Package-Requires: ((emacs "29.1") tuareg)
 ;; Created    : November 2024
 ;; Keywords   : menhir ocamlyacc languages tree-sitter
