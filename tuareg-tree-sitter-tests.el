@@ -489,5 +489,135 @@ This is a key requirement: tree-sitter should be a drop-in replacement."
       (tuareg-ocamllex-mode)
       (should (treesit-parser-list)))))
 
+;;; OPAM Tree-sitter Tests
+
+(ert-deftest tuareg-opam-treesitter-mode-activation ()
+  "Test that tree-sitter mode activates correctly for OPAM files."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "opam-version: \"2.0\"\nname: \"test\"\nversion: \"1.0\"")
+      (tuareg-opam-mode)
+      ;; Verify that a tree-sitter parser was created
+      (should (treesit-parser-list))
+      (should (eq (treesit-parser-language (car (treesit-parser-list))) 'opam)))))
+
+(ert-deftest tuareg-opam-treesitter-mode-not-activated ()
+  "Test that tree-sitter mode does not activate when disabled for OPAM."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)))
+  (let ((tuareg-mode-treesitter-derive nil))
+    (with-temp-buffer
+      (insert "opam-version: \"2.0\"\nname: \"test\"\nversion: \"1.0\"")
+      (tuareg-opam-mode)
+      ;; Verify that no tree-sitter parser was created
+      (should-not (treesit-parser-list)))))
+
+(ert-deftest tuareg-opam-treesitter-font-lock-keyword ()
+  "Test that OPAM keywords are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "depends: [\"ocaml\"]")
+      (tuareg-opam-mode)
+      (font-lock-ensure)
+      ;; Check that "depends" is highlighted as a keyword
+      (goto-char (point-min))
+      (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))
+
+(ert-deftest tuareg-opam-treesitter-font-lock-comment ()
+  "Test that OPAM comments are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "# This is a comment\nname: \"test\"")
+      (tuareg-opam-mode)
+      (font-lock-ensure)
+      ;; Check that the comment is highlighted
+      (goto-char (point-min))
+      (forward-char 2)
+      (should (eq (get-text-property (point) 'face) 'font-lock-comment-face)))))
+
+(ert-deftest tuareg-opam-treesitter-font-lock-string ()
+  "Test that OPAM strings are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "name: \"test-package\"")
+      (tuareg-opam-mode)
+      (font-lock-ensure)
+      ;; Check that the string is highlighted
+      (goto-char (point-min))
+      (search-forward "\"test")
+      (should (eq (get-text-property (point) 'face) 'font-lock-string-face)))))
+
+(ert-deftest tuareg-opam-treesitter-indentation ()
+  "Test that OPAM indentation works with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "depends: [\n\"ocaml\"\n\"dune\"\n]")
+      (tuareg-opam-mode)
+      ;; Test that we can indent without error
+      (goto-char (point-min))
+      (forward-line 1)
+      (indent-for-tab-command)
+      ;; Just verify no error occurred
+      (should t))))
+
+(ert-deftest tuareg-opam-treesitter-from-file ()
+  "Test that tree-sitter mode works correctly with a real OPAM file."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (let ((file (expand-file-name "tuareg.opam" tuareg-tree-sitter-test-dir))
+        (tuareg-mode-treesitter-derive t))
+    (when (file-exists-p file)
+      (with-temp-buffer
+        (insert-file-contents file)
+        (tuareg-opam-mode)
+        ;; Verify tree-sitter parser was created
+        (should (treesit-parser-list))
+        ;; Verify font-locking works
+        (font-lock-ensure)
+        ;; Check that we can find a keyword
+        (goto-char (point-min))
+        (when (search-forward "opam-version" nil t)
+          (goto-char (match-beginning 0))
+          (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))))
+
+(ert-deftest tuareg-opam-treesitter-toggle ()
+  "Test toggling between standard and tree-sitter modes for OPAM."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'opam)))
+  (with-temp-buffer
+    (insert "opam-version: \"2.0\"\nname: \"test\"")
+    ;; Start with tree-sitter disabled
+    (let ((tuareg-mode-treesitter-derive nil))
+      (tuareg-opam-mode)
+      (should-not (treesit-parser-list)))
+    ;; Enable tree-sitter and reload
+    (let ((tuareg-mode-treesitter-derive t))
+      (tuareg-opam-mode)
+      (should (treesit-parser-list)))))
+
 (provide 'tuareg-tree-sitter-tests)
 ;;; tuareg-tree-sitter-tests.el ends here
