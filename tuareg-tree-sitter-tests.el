@@ -13,6 +13,7 @@
 
 (require 'tuareg)
 (require 'tuareg-treesitter)
+(require 'tuareg-menhir)
 (require 'ert)
 
 (defconst tuareg-tree-sitter-test-dir
@@ -253,6 +254,122 @@ This is a key requirement: tree-sitter should be a drop-in replacement."
     ;; Re-enable with tree-sitter
     (let ((tuareg-mode-treesitter-derive t))
       (tuareg-mode)
+      (should (treesit-parser-list)))))
+
+;;; Menhir Tree-sitter Tests
+
+(ert-deftest tuareg-menhir-treesitter-mode-activation ()
+  "Test that tree-sitter mode activates correctly for Menhir files."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "%token INT\n%%\nmain: INT { $1 }")
+      (tuareg-menhir-mode)
+      ;; Verify that a tree-sitter parser was created
+      (should (treesit-parser-list))
+      (should (eq (treesit-parser-language (car (treesit-parser-list))) 'menhir)))))
+
+(ert-deftest tuareg-menhir-treesitter-mode-not-activated ()
+  "Test that tree-sitter mode does not activate when disabled for Menhir."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)))
+  (let ((tuareg-mode-treesitter-derive nil))
+    (with-temp-buffer
+      (insert "%token INT\n%%\nmain: INT { $1 }")
+      (tuareg-menhir-mode)
+      ;; Verify that no tree-sitter parser was created
+      (should-not (treesit-parser-list)))))
+
+(ert-deftest tuareg-menhir-treesitter-font-lock-keyword ()
+  "Test that Menhir keywords are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "%token INT\n%%\nmain: INT { $1 }")
+      (tuareg-menhir-mode)
+      (font-lock-ensure)
+      ;; Check that "%token" is highlighted as a keyword
+      (goto-char (point-min))
+      (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))
+
+(ert-deftest tuareg-menhir-treesitter-font-lock-comment ()
+  "Test that Menhir comments are font-locked correctly with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "/* comment */\n%token INT")
+      (tuareg-menhir-mode)
+      (font-lock-ensure)
+      ;; Check that the comment is highlighted
+      (goto-char (point-min))
+      (forward-char 3)
+      (should (eq (get-text-property (point) 'face) 'font-lock-comment-face)))))
+
+(ert-deftest tuareg-menhir-treesitter-indentation ()
+  "Test that Menhir indentation works with tree-sitter."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (let ((tuareg-mode-treesitter-derive t))
+    (with-temp-buffer
+      (insert "%token INT\n%%\nmain:\n| INT { $1 }")
+      (tuareg-menhir-mode)
+      ;; Test that we can indent without error
+      (goto-char (point-min))
+      (forward-line 3)
+      (indent-for-tab-command)
+      ;; Just verify no error occurred
+      (should t))))
+
+(ert-deftest tuareg-menhir-treesitter-from-file ()
+  "Test that tree-sitter mode works correctly with a real Menhir file."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (let ((file (expand-file-name "test-menhir.mly" tuareg-tree-sitter-test-dir))
+        (tuareg-mode-treesitter-derive t))
+    (when (file-exists-p file)
+      (with-temp-buffer
+        (insert-file-contents file)
+        (tuareg-menhir-mode)
+        ;; Verify tree-sitter parser was created
+        (should (treesit-parser-list))
+        ;; Verify font-locking works
+        (font-lock-ensure)
+        ;; Check that we can find a keyword
+        (goto-char (point-min))
+        (when (search-forward "%token" nil t)
+          (goto-char (match-beginning 0))
+          (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face)))))))
+
+(ert-deftest tuareg-menhir-treesitter-toggle ()
+  "Test toggling between standard and tree-sitter modes for Menhir."
+  (skip-unless (and (version<= "29.1" emacs-version)
+                    (require 'treesit nil t)
+                    (fboundp 'treesit-ready-p)
+                    (treesit-ready-p 'menhir)))
+  (with-temp-buffer
+    (insert "%token INT\n%%\nmain: INT { $1 }")
+
+    ;; Start with tree-sitter disabled
+    (let ((tuareg-mode-treesitter-derive nil))
+      (tuareg-menhir-mode)
+      (should-not (treesit-parser-list)))
+
+    ;; Re-enable with tree-sitter
+    (let ((tuareg-mode-treesitter-derive t))
+      (tuareg-menhir-mode)
       (should (treesit-parser-list)))))
 
 (provide 'tuareg-tree-sitter-tests)

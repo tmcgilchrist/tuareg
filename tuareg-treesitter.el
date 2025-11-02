@@ -21,9 +21,23 @@
 (defun tuareg-treesitter--setup ()
   "Set up tree-sitter support in the current tuareg-mode buffer.
 This sets up tree-sitter for font-locking while keeping SMIE for indentation."
-  (unless (treesit-ready-p 'ocaml)
-    ;; TODO We should offer to install tree-sitter grammars here!
-    (error "Tree-sitter for OCaml isn't available. Please install tree-sitter-ocaml"))
+  ;; Check if all three OCaml grammars are available
+  (let ((missing-grammars '()))
+    (dolist (lang '(ocaml ocaml-interface ocaml-type))
+      (unless (treesit-ready-p lang)
+        (push lang missing-grammars)))
+
+    (when missing-grammars
+      (if (and (require 'tuareg-treesitter-install nil t)
+               (yes-or-no-p (format "Tree-sitter grammars missing: %s. Install them now? "
+                                    (mapconcat #'symbol-name (nreverse missing-grammars) ", "))))
+          (progn
+            (tuareg-treesitter--install-grammars-noninteractive)
+            ;; Re-check after installation
+            (dolist (lang '(ocaml ocaml-interface ocaml-type))
+              (unless (treesit-ready-p lang)
+                (error "Failed to install tree-sitter grammar for %s" lang))))
+        (error "Tree-sitter for OCaml isn't available. Run M-x tuareg-treesitter-install-grammars"))))
 
   ;; Create the tree-sitter parser
   (treesit-parser-create 'ocaml)
