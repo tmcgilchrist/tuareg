@@ -1,0 +1,80 @@
+# Dockerfile for running tuareg Emacs tests with Emacs 30 (tree-sitter ABI 15)
+# Compiles Emacs 30 from official GNU source for security
+FROM ubuntu:24.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies for Emacs and tree-sitter grammars
+RUN apt-get update && apt-get install -y \
+    # Emacs build dependencies
+    build-essential \
+    libgnutls28-dev \
+    libtree-sitter-dev \
+    libjansson4 \
+    libjansson-dev \
+    libncurses5-dev \
+    texinfo \
+    autoconf \
+    automake \
+    # Tree-sitter grammar build dependencies
+    git \
+    gcc \
+    g++ \
+    make \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build Emacs 30 from official GNU source (emacs-30 branch)
+# This will have tree-sitter ABI 15 support
+WORKDIR /tmp/emacs-build
+RUN git clone --depth 1 --branch emacs-30 https://git.savannah.gnu.org/git/emacs.git && \
+    cd emacs && \
+    ./autogen.sh && \
+    ./configure \
+        --without-x \
+        --without-sound \
+        --without-xpm \
+        --without-jpeg \
+        --without-tiff \
+        --without-gif \
+        --without-png \
+        --without-rsvg \
+        --without-imagemagick \
+        --without-xft \
+        --without-libotf \
+        --without-m17n-flt \
+        --without-xaw3d \
+        --without-toolkit-scroll-bars \
+        --without-gpm \
+        --without-dbus \
+        --without-gconf \
+        --without-gsettings \
+        --with-tree-sitter \
+        --with-json && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/emacs-build
+
+# Verify Emacs version and tree-sitter support
+RUN emacs --version && \
+    emacs --batch --eval "(message \"Tree-sitter available: %s\" (treesit-available-p))"
+
+# Create working directory
+WORKDIR /tuareg
+
+# Copy tuareg source files
+COPY *.el ./
+COPY *.mly ./
+COPY *.mll ./
+COPY *.ml ./
+COPY Makefile ./
+
+# Create directory for tree-sitter grammars
+RUN mkdir -p /root/.emacs.d/tree-sitter
+
+# Set up environment
+ENV EMACS=emacs
+
+# Default command: run all standard tests
+CMD ["make", "check"]

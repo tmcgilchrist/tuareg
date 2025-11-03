@@ -131,6 +131,13 @@ When no governing keyword is found, this value is used to indent the line
 if it has to."
   :group 'tuareg :type 'integer)
 
+(defcustom tuareg-mode-treesitter-derive nil
+  "Whether tuareg-mode should derive from the new treesitter mode.
+   This option requires emacs29+."
+  :version "29.1"
+  :type 'boolean
+  :group 'tuareg)
+
 (defcustom tuareg-support-camllight nil
   "If true, handle Caml Light character syntax (incompatible with labels)."
   :group 'tuareg :type 'boolean
@@ -3313,8 +3320,16 @@ Short cuts for interactions with the REPL:
     (setq ff-search-directories '(".")
           ff-other-file-alist tuareg-other-file-alist)
     (add-hook 'ff-file-created-hook #'tuareg--ff-file-created-hook nil t)
-    (tuareg--common-mode-setup)
-    (tuareg--install-font-lock)
+
+    ;; TODO Conditional load of treesitter or smie based font-lock
+    (if (and tuareg-mode-treesitter-derive
+             (version<= "29.1" emacs-version))
+        (progn
+          (require 'tuareg-treesitter)
+          (tuareg-treesitter--setup))
+      (tuareg--common-mode-setup)
+      (tuareg--install-font-lock))
+
     (setq-local beginning-of-defun-function #'tuareg-beginning-of-defun)
     (setq-local end-of-defun-function #'tuareg-end-of-defun)
     (setq imenu-create-index-function #'tuareg-imenu-create-index)
@@ -4178,5 +4193,10 @@ See `imenu-create-index-function'."
 ;;                             Hooks and Exit
 
 (provide 'tuareg)
+
+;; (if (and tuareg-mode-treesitter-derive
+;;          (version <= "29.1" emacs-version))
+;;     (require 'tuareg-treesitter)
+;;   (require 'tuareg))
 
 ;;; tuareg.el ends here

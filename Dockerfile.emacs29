@@ -1,0 +1,38 @@
+# Dockerfile for running tuareg Emacs tests in isolation
+FROM ubuntu:24.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Emacs 29+ and build dependencies for tree-sitter grammars
+RUN apt-get update && apt-get install -y \
+    emacs-nox \
+    git \
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify Emacs version
+RUN emacs --version
+
+# Create working directory
+WORKDIR /tuareg
+
+# Copy tuareg source files
+COPY *.el ./
+COPY *.mly ./
+COPY *.mll ./
+COPY *.ml ./
+COPY Makefile ./
+
+# Create directory for tree-sitter grammars
+RUN mkdir -p /root/.emacs.d/tree-sitter
+
+# Set up environment
+ENV EMACS=emacs
+
+# Default command: run all standard tests
+CMD ["make", "check"]

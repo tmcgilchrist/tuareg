@@ -113,13 +113,53 @@
 ;;;###autoload
 (define-derived-mode tuareg-menhir-mode prog-mode "Menhir"
   "Major mode to edit Menhir (and Ocamlyacc) files."
-  (setq-local indent-line-function #'tuareg-menhir--indent)
-  (setq-local comment-start "/* ")
-  (setq-local comment-end " */")
-  (setq-local comment-start-skip "\\(?:[(/]\\*+\\|//+\\)[ \t]*")
-  (setq-local comment-end-skip "[ \t]*\\(?:\\*+[/)]\\)?")
-  (setq-local font-lock-defaults '(tuareg-menhir-font-lock-keywords))
-  (setq-local imenu-generic-expression tuareg-menhir-imenu-generic-expression)
+  ;; Check if tree-sitter mode should be used
+  (if (and tuareg-mode-treesitter-derive
+           (version<= "29.1" emacs-version)
+           (require 'treesit nil t)
+           (fboundp 'treesit-ready-p)
+           (treesit-ready-p 'menhir))
+      (progn
+        ;; Use tree-sitter mode
+        (require 'menhir-ts-mode)
+        ;; Create tree-sitter parser
+        (treesit-parser-create 'menhir)
+
+        ;; Comments
+        (setq-local comment-start "/* ")
+        (setq-local comment-end " */")
+        (setq-local comment-start-skip "\\(?:[(/]\\*+\\|//+\\)[ \t]*")
+        (setq-local comment-end-skip "[ \t]*\\(?:\\*+[/)]\\)?")
+
+        ;; Indentation
+        (setq-local treesit-simple-indent-rules menhir-ts-mode--indent-rules)
+
+        ;; Font-lock
+        (setq-local treesit-font-lock-settings
+                    (menhir-ts-mode--font-lock-settings 'menhir))
+        (setq-local treesit-font-lock-feature-list
+                    '((comment)
+                      (keyword)
+                      (type function variable string)
+                      (operator delimiter error)))
+
+        (setq-local treesit-language-at-point-function
+                    (lambda (_pos) 'menhir))
+
+        ;; Imenu
+        (setq-local treesit-simple-imenu-settings
+                    '(("Rule" "\\`rule_name\\'" nil nil)))
+
+        (treesit-major-mode-setup))
+
+    ;; Use standard mode (no tree-sitter)
+    (setq-local indent-line-function #'tuareg-menhir--indent)
+    (setq-local comment-start "/* ")
+    (setq-local comment-end " */")
+    (setq-local comment-start-skip "\\(?:[(/]\\*+\\|//+\\)[ \t]*")
+    (setq-local comment-end-skip "[ \t]*\\(?:\\*+[/)]\\)?")
+    (setq-local font-lock-defaults '(tuareg-menhir-font-lock-keywords))
+    (setq-local imenu-generic-expression tuareg-menhir-imenu-generic-expression))
   )
 
 (provide 'tuareg-menhir)

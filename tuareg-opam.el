@@ -305,24 +305,56 @@ characters \\([0-9]+\\)-\\([0-9]+\\): +\\([^\n]*\\)$"
 ;;;###autoload
 (define-derived-mode tuareg-opam-mode prog-mode "Tuareg-opam"
   "Major mode to edit opam files."
-  (setq font-lock-defaults '(tuareg-opam-font-lock-keywords))
-  (setq-local comment-start "#")
-  (setq-local comment-end "")
-  (setq-local prettify-symbols-alist tuareg-opam-prettify-symbols)
-  (setq indent-tabs-mode nil)
-  (setq-local require-final-newline mode-require-final-newline)
-  (smie-setup tuareg-opam-smie-grammar #'tuareg-opam-smie-rules)
+  ;; Check if tree-sitter mode should be used
+  (if (and tuareg-mode-treesitter-derive
+           (version<= "29.1" emacs-version)
+           (require 'treesit nil t)
+           (fboundp 'treesit-ready-p)
+           (treesit-ready-p 'opam))
+      (progn
+        ;; Use tree-sitter mode
+        (require 'opam-ts-mode)
+        ;; Create tree-sitter parser
+        (treesit-parser-create 'opam)
 
-  ;; Explicit variable declarations to avoid Emacs 24 warnings
-  (defvar tuareg-opam--flymake-proc-allowed-file-name-masks)
-  (defvar tuareg-opam--flymake-proc-err-line-patterns)
+        ;; Comments
+        (setq-local comment-start "#")
+        (setq-local comment-end "")
 
-  (push tuareg-opam--allowed-file-name-masks
-        tuareg-opam--flymake-proc-allowed-file-name-masks)
-  (setq-local tuareg-opam--flymake-proc-err-line-patterns
-              tuareg-opam--err-line-patterns)
-  (when (and tuareg-opam-flymake buffer-file-name)
-    (flymake-mode t)))
+        ;; Set tree-sitter specific configuration
+        (setq-local treesit-simple-indent-rules opam-ts-mode--indent-rules)
+        (setq-local treesit-font-lock-settings (opam-ts-mode--font-lock-settings 'opam))
+        (setq-local treesit-font-lock-feature-list
+                    '((comment)
+                      (keyword)
+                      (string number boolean)
+                      (operator delimiter variable error)))
+        (setq-local treesit-language-at-point-function (lambda (_pos) 'opam))
+        (setq-local treesit-simple-imenu-settings
+                    '(("Variable" "\\`variable\\'" nil nil)
+                      ("Section" "\\`section\\'" nil nil)))
+
+        (treesit-major-mode-setup))
+
+    ;; Use standard mode (no tree-sitter) - EXISTING CODE
+    (setq font-lock-defaults '(tuareg-opam-font-lock-keywords))
+    (setq-local comment-start "#")
+    (setq-local comment-end "")
+    (setq-local prettify-symbols-alist tuareg-opam-prettify-symbols)
+    (setq indent-tabs-mode nil)
+    (setq-local require-final-newline mode-require-final-newline)
+    (smie-setup tuareg-opam-smie-grammar #'tuareg-opam-smie-rules)
+
+    ;; Explicit variable declarations to avoid Emacs 24 warnings
+    (defvar tuareg-opam--flymake-proc-allowed-file-name-masks)
+    (defvar tuareg-opam--flymake-proc-err-line-patterns)
+
+    (push tuareg-opam--allowed-file-name-masks
+          tuareg-opam--flymake-proc-allowed-file-name-masks)
+    (setq-local tuareg-opam--flymake-proc-err-line-patterns
+                tuareg-opam--err-line-patterns)
+    (when (and tuareg-opam-flymake buffer-file-name)
+      (flymake-mode t))))
 
 (defun tuareg-opam-config-env (&optional switch)
   "Get the opam environment for the given switch (or the default
