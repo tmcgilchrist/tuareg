@@ -8,21 +8,30 @@
 
 ;; Simple helper to install tree-sitter grammars for tuareg modes.
 ;;
-;; This module handles tree-sitter grammar installation with support for
-;; both Emacs 29.x (ABI 14) and Emacs 30+ (ABI 15).
+;; This module handles tree-sitter grammar installation using ABI 14
+;; for maximum compatibility across Emacs versions.
 ;;
-;; BRANCHING STRATEGY:
+;; BRANCHING STRATEGY AND ABI COMPATIBILITY:
 ;;
-;; Tree-sitter grammars must be compiled with the correct ABI version:
-;; - Emacs 29.x requires ABI 14 (tree-sitter library 0.22.x)
-;; - Emacs 30+ requires ABI 15 (tree-sitter library 0.25.x)
+;; Tree-sitter ABI support depends on which tree-sitter library version
+;; Emacs was built against, NOT the Emacs version number:
 ;;
-;; To support both Emacs versions, we maintain dual branches for some grammars:
-;; - `emacs-29` branch: Uses tree-sitter 0.22.x for ABI 14 compatibility
-;; - `master` branch: Uses tree-sitter 0.25.x for ABI 15 (latest features)
+;; - tree-sitter 0.20.x - 0.24.x: supports ABI 13-14
+;; - tree-sitter 0.25.x: supports ABI 13-15
 ;;
-;; This applies to: tree-sitter-menhir, tree-sitter-opam
-;; OCaml and OCamllex grammars already use 0.22.4 and work on both versions.
+;; Both Emacs 29.x and 30.x can support different ABI ranges depending on
+;; their build configuration. For maximum compatibility, we use ABI 14:
+;;
+;; - Works with all tested Emacs 29.x builds
+;; - Works with all tested Emacs 30.x builds (even those built with 0.25.x)
+;; - More portable than ABI 15 (which requires 0.25.x)
+;;
+;; BRANCH USAGE:
+;; - `emacs-29` branch: Grammars regenerated with --abi=14 for compatibility
+;; - `master` branch: May use ABI 15 (future, when universally supported)
+;;
+;; This applies to: tree-sitter-menhir, tree-sitter-dune, tree-sitter-opam
+;; OCaml grammars use v0.24.2 tag which provides ABI 14 compatibility.
 
 ;;; Code:
 
@@ -32,22 +41,19 @@
 ;; Currently using tmcgilchrist's repos for development (menhir, ocamllex, opam)
 (defvar tuareg-treesitter-grammars
   `((ocaml "https://github.com/tree-sitter/tree-sitter-ocaml" "v0.24.2" "grammars/ocaml/src")
-    (ocaml-interface "https://github.com/tree-sitter/tree-sitter-ocaml" "v0.24.2" "grammars/interface/src")
-    (ocaml-type "https://github.com/tree-sitter/tree-sitter-ocaml" "v0.24.2" "grammars/type/src")
-    ;; Menhir: Use emacs-29 branch for Emacs 29.x (ABI 14), master for Emacs 30+ (ABI 15)
-    (menhir "https://github.com/tmcgilchrist/tree-sitter-menhir"
-            ,(if (version< emacs-version "30") "emacs-29" nil)
-            "src")
-    (ocamllex "https://github.com/tmcgilchrist/tree-sitter-ocamllex" nil "src")
-    ;; Opam: Use emacs-29 branch for Emacs 29.x (ABI 14), master for Emacs 30+ (ABI 15)
-    (opam "https://github.com/tmcgilchrist/tree-sitter-opam"
-          ,(if (version< emacs-version "30") "emacs-29" nil)
-          "src"))
+    (ocaml_interface "https://github.com/tree-sitter/tree-sitter-ocaml" "v0.24.2" "grammars/interface/src")
+    (ocaml_type "https://github.com/tree-sitter/tree-sitter-ocaml" "v0.24.2" "grammars/type/src")
+
+    (menhir "https://github.com/tmcgilchrist/tree-sitter-menhir" "emacs-29" "src")
+    (dune "https://github.com/tmcgilchrist/tree-sitter-dune" "emacs-29" "src")
+    (ocamllex "https://github.com/tmcgilchrist/tree-sitter-ocamllex" "master" "src")
+    (opam "https://github.com/tmcgilchrist/tree-sitter-opam" "emacs-29" "src"))
   "List of tree-sitter grammars needed for tuareg.
 Format: (LANGUAGE REPO-URL REVISION SOURCE-DIR)
 
-The REVISION field is dynamically selected based on Emacs version to ensure
-correct ABI compatibility. See Commentary section for branching strategy.")
+The REVISION field specifies which branch/tag to use. We use 'emacs-29'
+branches for grammars regenerated with ABI 14 for maximum compatibility.
+See Commentary section for details on ABI compatibility strategy.")
 
 (defun tuareg-treesitter--install-grammars-noninteractive ()
   "Install missing tree-sitter grammars without prompting.
