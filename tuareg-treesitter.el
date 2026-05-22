@@ -68,6 +68,14 @@
 (declare-function treesit-ready-p "treesit")
 (declare-function treesit-language-available-p "treesit")
 (declare-function treesit-install-language-grammar "treesit")
+(declare-function treesit-node-check "treesit.c")
+(declare-function treesit-node-type "treesit.c")
+(declare-function treesit-node-text "treesit")
+(declare-function treesit-node-parent "treesit.c")
+(declare-function treesit-node-child-by-field-name "treesit.c")
+(declare-function treesit-node-top-level "treesit")
+(declare-function treesit-search-subtree "treesit")
+(declare-function treesit-simple-imenu "treesit")
 
 (defgroup tuareg-treesitter nil
   "Create Tree-sitter parsers in Tuareg buffers."
@@ -93,6 +101,12 @@ Each entry has the form (LANG URL REVISION SOURCE-DIR), suitable for
   "If non-nil, install missing OCaml grammars automatically.
 When nil, missing grammars are left alone; install them yourself with
 \\[tuareg-treesitter-install-grammars]."
+  :type 'boolean)
+
+(defcustom tuareg-treesitter-imenu t
+  "If non-nil, build the Imenu index from the Tree-sitter tree.
+This replaces Tuareg's own regexp-based Imenu index with one derived
+from the OCaml parse tree.  Set to nil to keep Tuareg's index."
   :type 'boolean)
 
 (defconst tuareg-treesitter--interface-file-regexp
@@ -143,11 +157,124 @@ is non-nil, in which case every grammar is reinstalled."
                  (mapconcat #'symbol-name (nreverse installed) ", "))
       (message "All OCaml Tree-sitter grammars are already installed"))))
 
+;;;; Imenu (Tree-sitter)
+
+;; A Tree-sitter Imenu index, modelled on `neocaml-mode'.  We drive
+;; `treesit-simple-imenu' directly rather than going through
+;; `treesit-major-mode-setup', so Tuareg keeps its own font-lock,
+;; indentation and defun navigation untouched.
+
+(defconst tuareg-treesitter--nested-context-regexp
+  (regexp-opt '("let_expression"
+                "parenthesized_module_expression"
+                "package_expression")
+              'symbols)
+  "Node types marking a nested (non-top-level) context.")
+
+(defun tuareg-treesitter--subtree-text (node type &optional depth)
+  "Return the text of the first TYPE node within NODE's subtree.
+Search up to DEPTH levels deep (default 1); return nil if not found."
+  (when-let* ((child (treesit-search-subtree node type nil nil (or depth 1))))
+    (treesit-node-text child t)))
+
+(defun tuareg-treesitter--defun-valid-p (node)
+  "Return non-nil when NODE is a top-level definition.
+Definitions nested inside a `let_expression', a parenthesized module
+expression or a package expression are skipped."
+  (and (treesit-node-check node 'named)
+       (not (treesit-node-top-level
+             node tuareg-treesitter--nested-context-regexp))))
+
+(defun tuareg-treesitter--defun-name (node)
+  "Return the name of definition NODE, or nil when it has none."
+  (pcase (treesit-node-type node)
+    ("type_binding"
+     (treesit-node-text (treesit-node-child-by-field-name node "name") t))
+    ("module_binding"
+     (tuareg-treesitter--subtree-text node "module_name"))
+    ("module_type_definition"
+     (tuareg-treesitter--subtree-text node "module_type_name"))
+    ("class_binding"
+     (tuareg-treesitter--subtree-text node "class_name"))
+    ("class_type_binding"
+     (tuareg-treesitter--subtree-text node "class_type_name"))
+    ("method_definition"
+     (tuareg-treesitter--subtree-text node "method_name"))
+    ("method_specification"
+     (tuareg-treesitter--subtree-text node "method_name"))
+    ("instance_variable_definition"
+     (tuareg-treesitter--subtree-text node "instance_variable_name"))
+    ("instance_variable_specification"
+     (tuareg-treesitter--subtree-text node "instance_variable_name"))
+    ("exception_definition"
+     (tuareg-treesitter--subtree-text node "constructor_name" 2))
+    ("external"
+     (tuareg-treesitter--subtree-text node "value_name"))
+    ("value_specification"
+     (tuareg-treesitter--subtree-text node "value_name"))
+    ("let_binding"
+     (treesit-node-text (treesit-node-child-by-field-name node "pattern") t))))
+
+(defun tuareg-treesitter--imenu-name (node)
+  "Return NODE's name for Imenu, qualified with enclosing definitions.
+Ancestor names are joined with `treesit-add-log-defun-delimiter'."
+  (let ((name nil))
+    (while node
+      (when-let* ((new (tuareg-treesitter--defun-name node)))
+        (setq name (if name
+                       (concat new treesit-add-log-defun-delimiter name)
+                     new)))
+      (setq node (treesit-node-parent node)))
+    name))
+
+(defconst tuareg-treesitter--imenu-settings
+  '(("Type" "\\`type_binding\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Exception" "\\`exception_definition\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Value" "\\`\\(?:let_binding\\|external\\)\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Method" "\\`method_definition\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Module" "\\`\\(?:module_binding\\|module_type_definition\\)\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Class" "\\`\\(?:class_binding\\|class_type_binding\\)\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name))
+  "`treesit-simple-imenu-settings' for OCaml implementation files.")
+
+(defconst tuareg-treesitter--interface-imenu-settings
+  '(("Type" "\\`type_binding\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Val" "\\`value_specification\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("External" "\\`external\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Exception" "\\`exception_definition\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Method" "\\`method_specification\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Module" "\\`\\(?:module_binding\\|module_type_definition\\)\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name)
+    ("Class" "\\`\\(?:class_binding\\|class_type_binding\\)\\'"
+     tuareg-treesitter--defun-valid-p tuareg-treesitter--imenu-name))
+  "`treesit-simple-imenu-settings' for OCaml interface files.")
+
+(defun tuareg-treesitter--setup-imenu (lang)
+  "Use a Tree-sitter Imenu index for LANG in the current buffer."
+  (setq-local treesit-simple-imenu-settings
+              (if (eq lang 'ocaml-interface)
+                  tuareg-treesitter--interface-imenu-settings
+                tuareg-treesitter--imenu-settings))
+  (setq-local imenu-create-index-function #'treesit-simple-imenu))
+
 (defun tuareg-treesitter-setup ()
   "Create a Tree-sitter parser in the current Tuareg buffer.
 Chooses the grammar from the file type (see
 `tuareg-treesitter-buffer-language').  Safe to call repeatedly:
 `treesit-parser-create' reuses an existing parser for the language.
+
+When `tuareg-treesitter-imenu' is non-nil, also replace Tuareg's
+Imenu index with a Tree-sitter one.
 
 Intended for `tuareg-mode-hook'."
   (when (and tuareg-treesitter-enable
@@ -160,7 +287,9 @@ Intended for `tuareg-mode-hook'."
         ;; Make `treesit-language-at' (and thus Combobulate's
         ;; `combobulate-primary-language') unambiguous in this buffer.
         (setq-local treesit-language-at-point-function
-                    (lambda (_pos) lang))))))
+                    (lambda (_pos) lang))
+        (when tuareg-treesitter-imenu
+          (tuareg-treesitter--setup-imenu lang))))))
 
 (add-hook 'tuareg-mode-hook #'tuareg-treesitter-setup)
 
